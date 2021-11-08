@@ -1,0 +1,5 @@
+# port,pin,label
+COM1,0,🡸
+COM1,1,🡻
+COM1,2,🡹
+COM1,3,🡺
