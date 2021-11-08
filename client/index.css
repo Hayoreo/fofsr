@@ -8,152 +8,36 @@ body {
 	font-size: 1em;
 	min-height: 100vh;
 	min-width: 100vw;
-	overflow: hidden;
+	overflow: auto;
+	white-space: nowrap;
 	font-family: Verdana;
 }
 
-#config {
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
-	background: #000008a0;
-	overflow: scroll;
-}
-
-.config-content {
-	margin-top: 50px;
-	background: #000008;
-	display: inline-block;
-	text-align: left;
-	padding: 20px;
-	border-radius: 5px;
-	min-width: 500px;
-	white-space: nowrap;
-}
-
-#progress-dim {
-	position: absolute;
-	padding-top: 100px;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
-	background: #88888880;
-}
-
-#progress-message {
-	padding: 10px;
-	margin-top: 30vh;
-	border-radius: 5px;
-	display: inline-block;
-	background: #22222a;
-}
-
-.config-list {
-	background: #22222a;
-	padding: 10px;
-	margin-top: 10px;
-	margin-bottom: 10px;
-	border-radius: 5px;
-}
-
-.config-item {
-	display: inline-block;
-	background: #44444c;
-	padding: 10px;
-	margin: 10px;
-	border-radius: 5px;
-}
-
-.config-label {
-	display: inline-block;
-	margin-right: 10px;
-	margin-left: 15px;
-}
-
-.pin-input {
-	width: 80px;
-}
-
-.port-select {
-	min-width: 80px;
-}
-
-.top-bar {
-	background: #44444c;
-	text-align: right;
-	height: 80px;
-}
-
-.top-bar-button {
-	margin: 10px;
-	height: 60px;
-	pointer: cursor;
-	cursor: pointer;
-	border-radius: 5px;
-}
-
-.top-bar-button:hover {
-	background: #88888888;
-}
-
-h3 {
-	font-size: 1.5em;
-	color: #ffeebb;
-	text-align: center;
-}
-
-button {
-	border-radius: 5px;
-	border-style: solid;
-	border-width: 2px;
-	border-color: #aabbcc;
-	background: #223344;
-	color: white;
-	font-size: 0.9em;
-	font-weight: bold;
-	padding: 5px;
-	cursor: pointer;
-	min-width: 30px;
-	margin-right: 5px;
-	margin-left: 5px;
-}
-
-button:hover {
-	background: #445566;
-}
-
-.sensor-reading-bar {
-	border-width: 4px;
-	border-color: #aabbcc;
-	border-style: solid;
-	border-radius: 5px;
-}
-
-.sensor-control-panel {
+.sensor {
 	margin-top: 20px;
-	white-space: nowrap;
-	min-height: calc(100vh - 100px);
-	overflow-x: scroll;
-}
-
-.sensor-control-container {
+	margin-left: 4px;
+	margin-right: 4px;
 	display: inline-block;
 }
 
-.sensor-control {
-	margin-bottom: 20px;
+.sensor-buttons {
+	margin-top: 4px;
 }
 
-.sensor-control input {
-	width: 60px;
-	font-size: 1.2em;
-	vertical-align: middle;
-	text-align: center;
+.sensor-button {
+	width: 30px;
+	height: 30px;
+	margin-left: 4px;
+	font-size: 1em;
+	font-weight: bold;
 }
 
-.hidden {
-	display: none !important;
+.sensor-label {
+	font-size: 1.5em;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.sensor-value {
+	background: #bbccddff;
 }
