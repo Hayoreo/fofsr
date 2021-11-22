@@ -11,12 +11,13 @@ import threading
 from serial_connection import SerialConnection
 
 SensorConfig = namedtuple('SensorConfig', [
-    'id',    # Unique ID among ALL sensors.
-    'port',  # Serial port.
-    'index', # Index among sensors for this port.
-    'pin',   # Teensy pin.
+    'id',     # Unique ID among ALL sensors.
+    'port',   # Serial port.
+    'index',  # Index among sensors for this port.
+    'pin',    # Teensy pin.
     'button', # Joystick button.
-    'label', # String to label the sensor.
+    'group',  # Group number for UI.
+    'label',  # String to label the sensor.
 ])
 
 logging.basicConfig(level=logging.INFO)
@@ -159,6 +160,7 @@ async def handle_websocket_connection(websocket, path):
     await websocket.send(json_encode({
         'sensors': [
             {
+                'group': config.group,
                 'label': config.label,
             }
             for config in sensor_configs
@@ -208,9 +210,10 @@ def load_sensor_configs():
                 if not line or line.startswith('#'):
                     continue
                 parts = line.split(',')
-                port, pin, button, label = (part.strip() for part in parts)
+                port, pin, button, group, label = (part.strip() for part in parts)
                 pin = int(pin)
                 button = int(button)
+                group = int(group)
 
                 if port not in sensor_configs_by_port:
                     sensor_configs_by_port[port] = []
@@ -222,6 +225,7 @@ def load_sensor_configs():
                     index=sensor_index,
                     pin=pin,
                     button=button,
+                    group=group,
                     label=label,
                 )
 

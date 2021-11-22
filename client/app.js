@@ -3,8 +3,6 @@ const App = {
 	_sensorCanvasWidth: 96,
 	_sensorCanvasHeight: 640,
 	_sensorMax: 1024,
-	_triggeredColor: '#22bb66',
-	_idleColor: '#4477ee',
 	_sensors: [],
 	start: () => {
     
@@ -57,6 +55,7 @@ const App = {
     App._root.appendChild(App._profilesSelect);
 
     App._sensorsRoot = document.createElement('div');
+    App._sensorsRoot.className = 'sensors-root';
     App._root.appendChild(App._sensorsRoot);
     
 		App._connect();
@@ -123,10 +122,12 @@ const App = {
 
 		console.log(sensors);
 
+    let groups = [];
+
 		for (let i = 0; i < sensors.length; i++) {
 			// declare sensorId within for block so we can use it in callbacks.
 			let sensorId = i;
-			
+
 			let sensor = sensors[sensorId];
 
 			let div = document.createElement('div');
@@ -173,9 +174,20 @@ const App = {
 			div.appendChild(label);
 			div.appendChild(canvas);
 			div.appendChild(buttons);
-			App._sensorsRoot.appendChild(div);
+
+      if (!groups[sensor.group]) {
+        groups[sensor.group] = document.createElement('div');
+        groups[sensor.group].className = 'sensors-group';
+        App._sensorsRoot.appendChild(groups[sensor.group]);
+      }
+
+			groups[sensor.group].appendChild(div);
+
+      let context = canvas.getContext('2d');
+      context.textAlign = 'center';
+      context.font = 'bold 20px monospace';
 			App._sensors.push({
-				context: canvas.getContext('2d'),
+				context: context,
         element: div,
 				threshold: 0,
 				value: 0,
@@ -226,12 +238,12 @@ const App = {
     }
 
     sensor.element.classList.remove('hidden');
-    
+
 		sensor.context.clearRect(0, 0, App._sensorCanvasWidth, App._sensorCanvasHeight);
 
 		sensor.context.fillStyle = sensor.value >= sensor.threshold
-			? App._triggeredColor
-			: App._idleColor;
+			? '#22bb66'
+			: '#4477ee';
 
 		let height = App._valueToHeight(sensor.value);
 		let y = App._sensorCanvasHeight - height;
@@ -240,8 +252,13 @@ const App = {
 		
 		let thresholdY = App._sensorCanvasHeight - App._valueToHeight(sensor.threshold);
 		
+		sensor.context.fillStyle = '#00000080';
+		sensor.context.fillRect(0, thresholdY, App._sensorCanvasWidth, 2);
+    sensor.context.fillRect(0, y, App._sensorCanvasWidth, 2);
+
 		sensor.context.fillStyle = '#000000';
-		sensor.context.fillRect(0, thresholdY-2, App._sensorCanvasWidth, 4);
+    sensor.context.fillText(sensor.threshold, 0.75*App._sensorCanvasWidth, thresholdY-5);
+    sensor.context.fillText(sensor.value, 0.25*App._sensorCanvasWidth, y-5);
 	},
 	_valueToHeight: value => value * (App._sensorCanvasHeight / App._sensorMax),
 }
