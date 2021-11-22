@@ -1,4 +1,4 @@
-# port, pin, panel, label
+# port, pin, button, label
 COM3, 16, 0, 🡸
 COM3, 22, 0, 🡸
 COM3, 15, 1, 🡻

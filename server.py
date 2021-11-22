@@ -15,7 +15,7 @@ SensorConfig = namedtuple('SensorConfig', [
     'port',  # Serial port.
     'index', # Index among sensors for this port.
     'pin',   # Teensy pin.
-    'panel', # Stepmania panel.
+    'button', # Joystick button.
     'label', # String to label the sensor.
 ])
 
@@ -187,7 +187,7 @@ def config_num_to_str(n):
 def send_config_to_ports():
     for port, configs in sensor_configs_by_port.items():
         config_str = ''.join(
-            config_num_to_str(config.pin) + config_num_to_str(config.panel)
+            config_num_to_str(config.pin) + config_num_to_str(config.button)
             for config in configs
         )
         cmd = f'c{config_str}\n'
@@ -208,9 +208,9 @@ def load_sensor_configs():
                 if not line or line.startswith('#'):
                     continue
                 parts = line.split(',')
-                port, pin, panel, label = (part.strip() for part in parts)
+                port, pin, button, label = (part.strip() for part in parts)
                 pin = int(pin)
-                panel = int(panel)
+                button = int(button)
 
                 if port not in sensor_configs_by_port:
                     sensor_configs_by_port[port] = []
@@ -221,7 +221,7 @@ def load_sensor_configs():
                     port=port,
                     index=sensor_index,
                     pin=pin,
-                    panel=panel,
+                    button=button,
                     label=label,
                 )
 
