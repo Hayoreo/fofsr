@@ -337,7 +337,10 @@ async def main():
 
     send_config_to_ports()
 
-    await websockets.serve(handle_websocket_connection, 'localhost', 8069)
+    for id, threshold in enumerate(profiles[active_profile_name]):
+        send_threshold_to_serial(id, threshold)
+
+    await websockets.serve(handle_websocket_connection, '0.0.0.0', 8069)
 
     for ser in serial_connections.values():
         ser.write(b't\n')

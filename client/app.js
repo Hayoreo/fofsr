@@ -61,7 +61,7 @@ const App = {
 		App._connect();
 	},
 	_connect: () => {
-		App._socket = new WebSocket('ws://localhost:8069');
+		App._socket = new WebSocket(`ws://${location.hostname}:8069`);
 
 		App._socket.addEventListener('message', App._handleWebsocketMessage);
 
