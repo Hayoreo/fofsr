@@ -30,11 +30,13 @@
 #endif
 
 // Default threshold value for each of the sensors.
-const int16_t kDefaultThreshold = 1000;
+const int16_t kDefaultThreshold = 600;
 // Max window size for both of the moving averages classes.
 const size_t kWindowSize = 50;
 // Baud rate used for Serial communication. Technically ignored by Teensys.
 const long kBaudRate = 115200;
+// Test value to see if we can refire the arrow while held
+const int16_t kMovingThresholdThreshold = 50;
 
 // We don't want to use digital pins 0 and 1 as they're needed for Serial
 // communication.
@@ -167,6 +169,7 @@ class SensorState {
       : pin_(0)
       , button_(0)
       , user_threshold_(kDefaultThreshold)
+	  , moving_threshold_(kDefaultThreshold)
       , moving_average_(kWindowSize)
       , state_(ButtonState::OFF)
       , offset_(0)
@@ -176,6 +179,7 @@ class SensorState {
       pin_ = pin;
       button_ = button;
       user_threshold_ = kDefaultThreshold;
+	  moving_threshold_ = kDefaultThreshold;
       state_ = ButtonState::OFF;
       offset_ = 0;
     }
@@ -196,13 +200,25 @@ class SensorState {
         cur_value_ = moving_average_.GetAverage(sensor_value) - offset_;
       #endif
 
-      if (cur_value_ >= user_threshold_ + kPaddingWidth &&
+		if (moving_threshold_ < cur_value_ - kMovingThresholdThreshold) {
+			moving_threshold_ = cur_value_ - kMovingThresholdThreshold;
+		}
+
+		if (moving_threshold_ > cur_value_ + kMovingThresholdThreshold) {
+			moving_threshold_ = cur_value_ + kMovingThresholdThreshold;
+		}
+
+		if (moving_threshold_ < user_threshold_) {
+			moving_threshold_ = user_threshold_;
+		}
+
+      if (cur_value_ >= moving_threshold_ + kPaddingWidth &&
           state_ == ButtonState::OFF) {
         state_ = ButtonState::ON;
         last_trigger_ms_ = curMillis;
       }
-
-      if (cur_value_ < user_threshold_ - kPaddingWidth &&
+	  
+      if (cur_value_ < moving_threshold_ - kPaddingWidth &&
           state_ == ButtonState::ON) {
         state_ = ButtonState::OFF;
       }
@@ -249,8 +265,10 @@ class SensorState {
     uint8_t pin_;
     // The button this sensor applies to.
     uint8_t button_;
-  // The user defined threshold value to activate/deactivate this sensor at.
+  // The user defined threshold value.
   int16_t user_threshold_;
+   // The threshold value to activate/deactivate this sensor at.
+  int16_t moving_threshold_;
   // The smoothed moving average calculated to reduce some of the noise. 
   HullMovingAverage moving_average_;
   ButtonState::State state_;
