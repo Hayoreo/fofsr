@@ -150,8 +150,10 @@ def send_threshold_to_serial(id, threshold):
 
     config = sensor_configs[id]
     cmd = str(config.index) + str(threshold) + '\n'
-    log.info('Sending threshold update: {config.port} {cmd}')
-    serial_connections[config.port].write(cmd.encode('ascii'))
+    conn = serial_connections[config.port]
+    if conn is not None:
+        log.info(f'Sending threshold update: {config.port} {repr(cmd)}')
+        conn.write(cmd.encode('ascii'))
 
 
 async def handle_websocket_connection(websocket, path):
@@ -177,6 +179,9 @@ async def handle_websocket_connection(websocket, path):
         while True:
             msg = await websocket.recv()
             await handle_websocket_message(websocket, msg)
+    except websockets.exceptions.ConnectionClosedOK:
+        log.info(f'Websocket disconnected (OK)')
+        pass
     finally:
         active_websockets.discard(websocket)
 
@@ -193,8 +198,10 @@ def send_config_to_ports():
             for config in configs
         )
         cmd = f'c{config_str}\n'
-        log.info(f'Sending config update: {port} {cmd}')
-        serial_connections[port].write(cmd.encode('ascii'))
+        conn = serial_connections[port]
+        if conn is not None:
+            log.info(f'Sending config update: {port} {cmd}')
+            conn.write(cmd.encode('ascii'))
 
 def load_sensor_configs():
     global sensor_configs_by_port
@@ -297,7 +304,8 @@ def save_profiles():
 async def write_values_commands_forever():
     while True:
         for ser in serial_connections.values():
-            ser.write(b'v\n')
+            if ser is not None:
+                ser.write(b'v\n')
         await asyncio.sleep(1/VALUE_READ_RATE)
 
 async def main():
@@ -326,14 +334,17 @@ async def main():
     for extra_port in actual_ports - ports:
         log.info(f'(Port {extra_port} is unused)')
 
-    serial_connections = {
-        port: SerialConnection(
-            port,
-            main_loop,
-            handle_serial_message,
-        )
-        for port in ports
-    }
+    serial_connections = {}
+    for port in ports:
+        try:
+            serial_connections[port] = SerialConnection(
+                port,
+                main_loop,
+                handle_serial_message,
+            )
+        except Exception:
+            print(f'Failed to connect to port {port}')
+            serial_connections[port] = None
 
     send_config_to_ports()
 
@@ -343,7 +354,8 @@ async def main():
     await websockets.serve(handle_websocket_connection, '0.0.0.0', 8069)
 
     for ser in serial_connections.values():
-        ser.write(b't\n')
+        if ser is not None:
+            ser.write(b't\n')
 
     main_loop.create_task(write_values_commands_forever())
 
