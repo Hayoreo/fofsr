@@ -4,60 +4,45 @@ const App = {
 	_sensorCanvasHeight: 640,
 	_sensorMax: 1024,
 	_sensors: [],
+	_profiles: [],
 	start: () => {
-    
-    // TODO : REMOVE BELOW
-    let bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 640;
-    bgCanvas.height = 160;
-    
-    //document.body.appendChild(bgCanvas);
-    let ctx = bgCanvas.getContext('2d');
-
-    let chunkCount = 5;
-    let rectSize = 1 << (chunkCount-1);
-    for (let i = 0; i < chunkCount; i++) {
-      let chunkStart = Math.floor(bgCanvas.width * i / chunkCount);
-      let chunkEnd = chunkStart + Math.floor(bgCanvas.width / chunkCount);
-      
-      for (let x = chunkStart; x < chunkEnd; x += rectSize) {
-        for (let y = 0; y < bgCanvas.height; y += rectSize) {
-          let r = 0x11 + Math.floor(Math.random() * 8);
-          let g = 0x13 + Math.floor(Math.random() * 8);
-          let b = 0x1C + Math.floor(Math.random() * 12);
-
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.fillRect(x, y, rectSize, rectSize);
-        }
-      }
-      
-      rectSize /= 2;
-    }
-    // TODO : REMOVE ABOVE
-    
-    
-    
 		App._root = document.body;
 
-    App._profilesSelect = document.createElement('select');
-    App._profilesSelect.className = 'profile-select';
-    App._profilesSelect.onchange = event => {
-      let value = event.target.value;
+		App._profilesSelect = document.createElement('select');
+		App._profilesSelect.className = 'profile-select';
+		App._profilesSelect.onchange = event => {
+			let value = event.target.value;
 
-      if (!value) return;
-      
-      event.target.value = null;
+			if (!value) return;
+			
+			event.target.value = null;
 
-      App._socket.send(JSON.stringify({
-        setActiveProfile: value,
-      }));
-    };
-    App._root.appendChild(App._profilesSelect);
+			App._socket.send(JSON.stringify({
+				setActiveProfile: value,
+			}));
+		};
+		App._root.appendChild(App._profilesSelect);
 
-    App._sensorsRoot = document.createElement('div');
-    App._sensorsRoot.className = 'sensors-root';
-    App._root.appendChild(App._sensorsRoot);
-    
+		App._secondaryProfilesSelect = document.createElement('select');
+		App._secondaryProfilesSelect.className = 'profile-select';
+		App._secondaryProfilesSelect.style.display = 'none';
+		App._secondaryProfilesSelect.onchange = event => {
+			let value = event.target.value;
+
+			if (value === '_') value = null;
+
+			event.target.value = null;
+
+			App._socket.send(JSON.stringify({
+				setSecondaryProfile: value,
+			}));
+		};
+		App._root.appendChild(App._secondaryProfilesSelect);
+
+		App._sensorsRoot = document.createElement('div');
+		App._sensorsRoot.className = 'sensors-root';
+		App._root.appendChild(App._sensorsRoot);
+		
 		App._connect();
 	},
 	_connect: () => {
@@ -89,13 +74,17 @@ const App = {
 			App._handleThresholds(message.thresholds);
 		}
 
-    if (message.profiles) {
-      App._handleProfiles(message.profiles);
-    }
+		if (message.profiles) {
+			App._handleProfiles(message.profiles);
+		}
 
-    if (message.activeProfile) {
-      App._handleActiveProfile(message.activeProfile);
-    }
+		if (message.activeProfile) {
+			App._handleActiveProfile(message.activeProfile);
+		}
+		
+		if (message.secondaryProfile !== undefined) {
+			App._handleSecondaryProfile(message.secondaryProfile);
+		}
 
 		for (let sensor of App._sensors) {
 			if (sensor.dirty) {
@@ -104,25 +93,70 @@ const App = {
 			}
 		}
 	},
-  _handleProfiles: profiles => {
-    App._profilesSelect.innerHTML = '';
-    for (let profile of profiles) {
-      let option = document.createElement('option');
-      option.value = profile;
-      option.appendChild(document.createTextNode(profile));
-      App._profilesSelect.appendChild(option);
-    }
-  },
-  _handleActiveProfile: activeProfile => {
-    App._profilesSelect.value = activeProfile;
-  },
+	_handleProfiles: profiles => {
+		App._profiles = profiles;
+		App._profilesSelect.innerHTML = '';
+		for (let profile of profiles) {
+			let option = document.createElement('option');
+			option.value = profile.name;
+			option.appendChild(document.createTextNode(profile.name));
+			App._profilesSelect.appendChild(option);
+		}
+		App._updateSecondaryProfiles();
+	},
+	_hasCommonGroup: (p1, p2) => {
+		for (let g1 of p1.groups) {
+			for (let g2 of p2.groups) {
+				if (g1 === g2) {
+					return true;
+				}
+			}
+		}
+		return false;
+	},
+	_updateSecondaryProfiles: () => {
+		let [activeProfile] = App._profiles.filter(p => p.name === App._profilesSelect.value);
+
+		let secondaryProfileNames = [];
+		if (activeProfile) {
+			for (let otherProfile of App._profiles) {
+				if (!App._hasCommonGroup(activeProfile, otherProfile)) {
+					secondaryProfileNames.push(otherProfile.name);
+				}
+			}
+		}
+
+		App._secondaryProfilesSelect.innerHTML = '';
+		if (secondaryProfileNames.length === 0) {
+			App._secondaryProfilesSelect.style.display = 'none';
+		} else {
+			App._secondaryProfilesSelect.style.display = '';
+			let noneOption = document.createElement('option');
+			noneOption.value = '_';
+			noneOption.appendChild(document.createTextNode('(none)'));
+			App._secondaryProfilesSelect.appendChild(noneOption);
+			for (let name of secondaryProfileNames) {
+				let option = document.createElement('option');
+				option.value = name;
+				option.appendChild(document.createTextNode(name));
+				App._secondaryProfilesSelect.appendChild(option);
+			}
+			App._secondaryProfilesSelect.value = '_';
+		}
+	},
+	_handleActiveProfile: activeProfile => {
+		App._profilesSelect.value = activeProfile;
+		
+		App._updateSecondaryProfiles();
+	},
+	_handleSecondaryProfile: secondaryProfile => {
+		App._secondaryProfilesSelect.value = secondaryProfile ? secondaryProfile : '_';
+	},
 	_handleSensors: sensors => {
 		App._sensors = [];
 		App._sensorsRoot.innerHTML = '';
 
-		console.log(sensors);
-
-    let groups = [];
+		let groups = [];
 
 		for (let i = 0; i < sensors.length; i++) {
 			// declare sensorId within for block so we can use it in callbacks.
@@ -161,7 +195,6 @@ const App = {
 			canvas.height = App._sensorCanvasHeight;
 
 			canvas.addEventListener('click', event => {
-				console.log('click!');
 				let rect = event.target.getBoundingClientRect();
 				let x = event.clientX - rect.left;
 				let y = event.clientY - rect.top;
@@ -175,32 +208,37 @@ const App = {
 			div.appendChild(canvas);
 			div.appendChild(buttons);
 
-      if (!groups[sensor.group]) {
-        groups[sensor.group] = document.createElement('div');
-        groups[sensor.group].className = 'sensors-group';
-        App._sensorsRoot.appendChild(groups[sensor.group]);
-      }
+			if (!groups[sensor.group]) {
+				groups[sensor.group] = document.createElement('div');
+				groups[sensor.group].className = 'sensors-group';
+				App._sensorsRoot.appendChild(groups[sensor.group]);
+			}
 
 			groups[sensor.group].appendChild(div);
 
-      let context = canvas.getContext('2d');
-      context.textAlign = 'center';
-      context.font = 'bold 20px monospace';
+			let context = canvas.getContext('2d');
+			context.textAlign = 'center';
+			context.font = 'bold 20px monospace';
 			App._sensors.push({
 				context: context,
-        element: div,
+				element: div,
 				threshold: 0,
-				value: 0,
+				min: 0,
+				max: 0,
 				dirty: true,
 			});
 		}
 	},
 	_handleValues: values => {
 		for (let id in values) {
-			let newValue = values[id];
+			let [newMin, newMax] = values[id];
 			let sensor = App._sensors[id];
-			if (newValue != sensor.value) {
-				sensor.value = newValue;
+			if (newMin !== sensor.min) {
+				sensor.min = newMin;
+				sensor.dirty = true;
+			}
+			if (newMax !== sensor.max) {
+				sensor.max = newMax;
 				sensor.dirty = true;
 			}
 		}
@@ -232,33 +270,38 @@ const App = {
 		}));
 	},
 	_renderSensor: sensor => {
-    if (sensor.threshold < 0) {
-      sensor.element.classList.add('hidden');
-      return;
-    }
+		if (sensor.threshold < 0) {
+			sensor.element.classList.add('hidden');
+			return;
+		}
 
-    sensor.element.classList.remove('hidden');
+		sensor.element.classList.remove('hidden');
 
 		sensor.context.clearRect(0, 0, App._sensorCanvasWidth, App._sensorCanvasHeight);
 
-		sensor.context.fillStyle = sensor.value >= sensor.threshold
+		sensor.context.fillStyle = sensor.min >= sensor.threshold
 			? '#22bb66'
+			: sensor.max >= sensor.threshold
+			? '#bbbb55'
 			: '#4477ee';
 
-		let height = App._valueToHeight(sensor.value);
-		let y = App._sensorCanvasHeight - height;
+		let height0 = App._valueToHeight(sensor.min);
+		let height1 = App._valueToHeight(sensor.max);
+		let y0 = App._sensorCanvasHeight - height0;
+		let y1 = App._sensorCanvasHeight - height1;
 
-		sensor.context.fillRect(0, y, App._sensorCanvasWidth, height);
+		sensor.context.fillRect(0, y0, App._sensorCanvasWidth, height0);
+		sensor.context.fillStyle = '#cc9988';
+		sensor.context.fillRect(0, y1, App._sensorCanvasWidth, height1 - height0);
 		
 		let thresholdY = App._sensorCanvasHeight - App._valueToHeight(sensor.threshold);
 		
 		sensor.context.fillStyle = '#00000080';
 		sensor.context.fillRect(0, thresholdY, App._sensorCanvasWidth, 2);
-    sensor.context.fillRect(0, y, App._sensorCanvasWidth, 2);
 
 		sensor.context.fillStyle = '#000000';
-    sensor.context.fillText(sensor.threshold, 0.75*App._sensorCanvasWidth, thresholdY-5);
-    sensor.context.fillText(sensor.value, 0.25*App._sensorCanvasWidth, y-5);
+		sensor.context.fillText(sensor.threshold, 0.75*App._sensorCanvasWidth, thresholdY-5);
+		sensor.context.fillText(sensor.max, 0.25*App._sensorCanvasWidth, y1-5);
 	},
 	_valueToHeight: value => value * (App._sensorCanvasHeight / App._sensorMax),
 }

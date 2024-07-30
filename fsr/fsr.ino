@@ -172,7 +172,11 @@ class SensorState {
 	  , moving_threshold_(kDefaultThreshold)
       , moving_average_(kWindowSize)
       , state_(ButtonState::OFF)
+      , cur_value_(0)
       , offset_(0)
+
+      , sample_min_(1024)
+      , sample_max_(-1)
       {}
 
     void Init(uint8_t pin, uint8_t button) {
@@ -230,6 +234,14 @@ class SensorState {
 //    if (state_ == ButtonState::OFF && curMillis - last_trigger_ms_ >= 3000) {
 //      UpdateOffset();
 //    }
+      if (cur_value_ < sample_min_)
+      {
+        sample_min_ = cur_value_;
+      }
+      if (cur_value_ > sample_max_)
+      {
+        sample_max_ = cur_value_;
+      }
     }
 
     uint8_t GetButton() {
@@ -256,6 +268,19 @@ class SensorState {
     return cur_value_;
   }
 
+  int16_t GetSampleMin() {
+    return sample_min_;
+  }
+
+  int16_t GetSampleMax() {
+    return sample_max_;
+  }
+
+  void StartNewSample() {
+    sample_min_ = 1024;
+    sample_max_ = -1;
+  }
+
   private:
   // One-tailed width size to create a window around user_threshold_ to
   // mitigate fluctuations by noise. 
@@ -278,6 +303,9 @@ class SensorState {
   int16_t offset_;
   // Timestamp of when the last time this sensor was triggered.
   unsigned long last_trigger_ms_ = 0;
+
+  int16_t sample_min_;
+  int16_t sample_max_;
 };
 
 /*===========================================================================*/
@@ -393,7 +421,10 @@ class SerialProcessor {
     Serial.print("v");
     for (size_t i = 0; i < sensorCount; ++i) {
       Serial.print(" ");
-      Serial.print(kSensorStates[i].GetCurValue());
+      Serial.print(kSensorStates[i].GetSampleMin());
+      Serial.print(" ");
+      Serial.print(kSensorStates[i].GetSampleMax());
+      kSensorStates[i].StartNewSample();
     }
     Serial.print("\n");
   }

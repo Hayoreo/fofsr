@@ -33,6 +33,7 @@ sensor_configs = []
 
 profiles = {}
 active_profile_name = None
+secondary_profile_name = None
 
 VALUE_READ_RATE = 30
 SERIAL_VALUES = b'v'[0]
@@ -46,15 +47,26 @@ async def handle_serial_message(port_name, msg):
     if kind == SERIAL_VALUES:
         values = [int(x) for x in msg[1:].strip().split(b' ')]
         configs = sensor_configs_by_port[port_name]
-        if len(values) != len(configs):
+        if len(values) == len(configs):
+            doubled_values = []
+            for v in values:
+                doubled_values.append(v)
+                doubled_values.append(v)
+            values = doubled_values
+
+        if len(values) != 2*len(configs):
             log.warning(
                 f'Received incorrect number of values from port {port_name}: {values}'
             )
             return
-        
+
+        value_pairs = []
+        for i in range(0, len(values), 2):
+            value_pairs.append([values[i], values[i+1]])
+
         value_updates = {
-            str(config.id): value
-            for config, value in zip(configs, values)
+            str(config.id): pair
+            for config, pair in zip(configs, value_pairs)
         }
         await broadcast_to_websockets({
             'values': value_updates,
@@ -105,34 +117,95 @@ async def handle_websocket_message(websocket, msg):
 
             id = update['id']
             delta = update['delta']
-            await set_threshold(id, profiles[active_profile_name][id] + delta)
+            await set_threshold(id, get_threshold(id) + delta)
         
         if 'setActiveProfile' in msg_data:
             await set_active_profile(msg_data['setActiveProfile'])
+
+        if 'setSecondaryProfile' in msg_data:
+            await set_secondary_profile(msg_data['setSecondaryProfile'])
 
     except Exception:
         log.exception(f'Failed to handle message {msg}')
 
 async def set_active_profile(new_active_profile_name):
     global active_profile_name
+    global secondary_profile_name
+
     active_profile_name = new_active_profile_name
+    secondary_profile_name = None
 
     if active_profile_name not in profiles:
         profiles[active_profile_name] = [500]*len(sensor_configs)
 
-    for id, threshold in enumerate(profiles[active_profile_name]):
+    thresholds = get_thresholds()
+
+    for id, threshold in enumerate(thresholds):
         send_threshold_to_serial(id, threshold)
 
     await broadcast_to_websockets({
         'thresholds': {
             str(id): threshold
-            for id, threshold in enumerate(profiles[active_profile_name])
+            for id, threshold in enumerate(thresholds)
         },
         'activeProfile': active_profile_name,
     })
 
+async def set_secondary_profile(new_secondary_profile_name):
+    global secondary_profile_name
+
+    if new_secondary_profile_name:
+        if new_secondary_profile_name not in profiles:
+            log.warning(f'Secondary profile name {new_secondary_profile_name} not found.')
+            new_secondary_profile_name = None
+
+    if new_secondary_profile_name:
+        # Check that it fits with the active profile
+        for value0, value1 in zip(profiles[active_profile_name], profiles[new_secondary_profile_name]):
+            if value0 != -1 and value1 != -1:
+                log.warning(f'Incompatible secondary profile detected.')
+                new_secondary_profile_name = None
+
+    if not new_secondary_profile_name:
+        new_secondary_profile_name = None
+
+    secondary_profile_name = new_secondary_profile_name
+
+    thresholds = get_thresholds()
+
+    for id, threshold in enumerate(thresholds):
+        send_threshold_to_serial(id, threshold)
+
+    await broadcast_to_websockets({
+        'thresholds': {
+            str(id): threshold
+            for id, threshold in enumerate(thresholds)
+        },
+        'secondaryProfile': secondary_profile_name,
+    })
+
+def get_threshold(id):
+    if secondary_profile_name:
+        return max(profiles[active_profile_name][id], profiles[secondary_profile_name][id])
+    else:
+        return profiles[active_profile_name][id]
+
+def get_thresholds():
+    if secondary_profile_name:
+        return [
+            max(v0, v1)
+            for v0, v1
+            in zip(profiles[active_profile_name], profiles[secondary_profile_name])
+        ]
+    else:
+        return profiles[active_profile_name]
+
 async def set_threshold(id, threshold):
-    profiles[active_profile_name][id] = threshold
+    if profiles[active_profile_name][id] != -1:
+        profiles[active_profile_name][id] = threshold
+    elif secondary_profile_name:
+        profiles[secondary_profile_name][id] = threshold
+
     save_profiles()
 
     # Send new threshold to fsrs
@@ -150,12 +223,26 @@ def send_threshold_to_serial(id, threshold):
 
     config = sensor_configs[id]
     cmd = str(config.index) + str(threshold) + '\n'
-    log.info('Sending threshold update: {config.port} {cmd}')
-    serial_connections[config.port].write(cmd.encode('ascii'))
+    conn = serial_connections[config.port]
+    if conn is not None:
+        log.info(f'Sending threshold update: {config.port} {repr(cmd)}')
+        conn.write(cmd.encode('ascii'))
 
 
 async def handle_websocket_connection(websocket, path):
     active_websockets.add(websocket)
+
+    profile_data = []
+    for name, values in profiles.items():
+        groups = set()
+        for config, value in zip(sensor_configs, values):
+            if value >= 0:
+                groups.add(config.group)
+
+        profile_data.append({
+            'name': name,
+            'groups': sorted(groups),
+        })
 
     await websocket.send(json_encode({
         'sensors': [
@@ -167,9 +254,9 @@ async def handle_websocket_connection(websocket, path):
         ],
         'thresholds': {
             str(id): threshold
-            for id, threshold in enumerate(profiles[active_profile_name])
+            for id, threshold in enumerate(get_thresholds())
         },
-        'profiles': list(profiles),
+        'profiles': profile_data,
         'activeProfile': active_profile_name,
     }))
 
@@ -177,6 +264,9 @@ async def handle_websocket_connection(websocket, path):
         while True:
             msg = await websocket.recv()
             await handle_websocket_message(websocket, msg)
+    except websockets.exceptions.ConnectionClosedOK:
+        log.info(f'Websocket disconnected (OK)')
+        pass
     finally:
         active_websockets.discard(websocket)
 
@@ -193,8 +283,10 @@ def send_config_to_ports():
             for config in configs
         )
         cmd = f'c{config_str}\n'
-        log.info(f'Sending config update: {port} {cmd}')
-        serial_connections[port].write(cmd.encode('ascii'))
+        conn = serial_connections[port]
+        if conn is not None:
+            log.info(f'Sending config update: {port} {cmd}')
+            conn.write(cmd.encode('ascii'))
 
 def load_sensor_configs():
     global sensor_configs_by_port
@@ -240,8 +332,10 @@ def load_sensor_configs():
 def load_profiles():
     global profiles
     global active_profile_name
+    global secondary_profile_name
 
     active_profile_name = None
+    secondary_profile_name = None
 
     try:
         with open('profiles.txt', 'r') as f:
@@ -297,7 +391,8 @@ def save_profiles():
 async def write_values_commands_forever():
     while True:
         for ser in serial_connections.values():
-            ser.write(b'v\n')
+            if ser is not None:
+                ser.write(b'v\n')
         await asyncio.sleep(1/VALUE_READ_RATE)
 
 async def main():
@@ -326,24 +421,28 @@ async def main():
     for extra_port in actual_ports - ports:
         log.info(f'(Port {extra_port} is unused)')
 
-    serial_connections = {
-        port: SerialConnection(
-            port,
-            main_loop,
-            handle_serial_message,
-        )
-        for port in ports
-    }
+    serial_connections = {}
+    for port in ports:
+        try:
+            serial_connections[port] = SerialConnection(
+                port,
+                main_loop,
+                handle_serial_message,
+            )
+        except Exception:
+            print(f'Failed to connect to port {port}')
+            serial_connections[port] = None
 
     send_config_to_ports()
 
-    for id, threshold in enumerate(profiles[active_profile_name]):
+    for id, threshold in enumerate(get_thresholds()):
         send_threshold_to_serial(id, threshold)
 
     await websockets.serve(handle_websocket_connection, '0.0.0.0', 8069)
 
     for ser in serial_connections.values():
-        ser.write(b't\n')
+        if ser is not None:
+            ser.write(b't\n')
 
     main_loop.create_task(write_values_commands_forever())
 

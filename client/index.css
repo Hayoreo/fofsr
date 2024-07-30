@@ -17,6 +17,8 @@ body {
 .profile-select {
 	margin-top: 10px;
 	font-size: 1.5em;
+	margin-left: 8px;
+	margin-right: 8px;
 }
 
 .sensor {
