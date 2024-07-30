@@ -47,15 +47,26 @@ async def handle_serial_message(port_name, msg):
     if kind == SERIAL_VALUES:
         values = [int(x) for x in msg[1:].strip().split(b' ')]
         configs = sensor_configs_by_port[port_name]
-        if len(values) != len(configs):
+        if len(values) == len(configs):
+            doubled_values = []
+            for v in values:
+                doubled_values.append(v)
+                doubled_values.append(v)
+            values = doubled_values
+
+        if len(values) != 2*len(configs):
             log.warning(
                 f'Received incorrect number of values from port {port_name}: {values}'
             )
             return
-        
+
+        value_pairs = []
+        for i in range(0, len(values), 2):
+            value_pairs.append([values[i], values[i+1]])
+
         value_updates = {
-            str(config.id): value
-            for config, value in zip(configs, values)
+            str(config.id): pair
+            for config, pair in zip(configs, value_pairs)
         }
         await broadcast_to_websockets({
             'values': value_updates,

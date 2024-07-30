@@ -223,17 +223,22 @@ const App = {
 				context: context,
 				element: div,
 				threshold: 0,
-				value: 0,
+				min: 0,
+				max: 0,
 				dirty: true,
 			});
 		}
 	},
 	_handleValues: values => {
 		for (let id in values) {
-			let newValue = values[id];
+			let [newMin, newMax] = values[id];
 			let sensor = App._sensors[id];
-			if (newValue != sensor.value) {
-				sensor.value = newValue;
+			if (newMin !== sensor.min) {
+				sensor.min = newMin;
+				sensor.dirty = true;
+			}
+			if (newMax !== sensor.max) {
+				sensor.max = newMax;
 				sensor.dirty = true;
 			}
 		}
@@ -274,24 +279,29 @@ const App = {
 
 		sensor.context.clearRect(0, 0, App._sensorCanvasWidth, App._sensorCanvasHeight);
 
-		sensor.context.fillStyle = sensor.value >= sensor.threshold
+		sensor.context.fillStyle = sensor.min >= sensor.threshold
 			? '#22bb66'
+			: sensor.max >= sensor.threshold
+			? '#bbbb55'
 			: '#4477ee';
 
-		let height = App._valueToHeight(sensor.value);
-		let y = App._sensorCanvasHeight - height;
+		let height0 = App._valueToHeight(sensor.min);
+		let height1 = App._valueToHeight(sensor.max);
+		let y0 = App._sensorCanvasHeight - height0;
+		let y1 = App._sensorCanvasHeight - height1;
 
-		sensor.context.fillRect(0, y, App._sensorCanvasWidth, height);
+		sensor.context.fillRect(0, y0, App._sensorCanvasWidth, height0);
+		sensor.context.fillStyle = '#cc9988';
+		sensor.context.fillRect(0, y1, App._sensorCanvasWidth, height1 - height0);
 		
 		let thresholdY = App._sensorCanvasHeight - App._valueToHeight(sensor.threshold);
 		
 		sensor.context.fillStyle = '#00000080';
 		sensor.context.fillRect(0, thresholdY, App._sensorCanvasWidth, 2);
-		sensor.context.fillRect(0, y, App._sensorCanvasWidth, 2);
 
 		sensor.context.fillStyle = '#000000';
 		sensor.context.fillText(sensor.threshold, 0.75*App._sensorCanvasWidth, thresholdY-5);
-		sensor.context.fillText(sensor.value, 0.25*App._sensorCanvasWidth, y-5);
+		sensor.context.fillText(sensor.max, 0.25*App._sensorCanvasWidth, y1-5);
 	},
 	_valueToHeight: value => value * (App._sensorCanvasHeight / App._sensorMax),
 }
